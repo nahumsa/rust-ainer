@@ -7,3 +7,5 @@ edition = "2024"
 clap = { version = "4.6.5", features = ["derive"] }
 env_logger = "0.11.11"
 log = "0.4.33"
+nix = "0.22.1"
+scan_fmt = "0.2.6"
