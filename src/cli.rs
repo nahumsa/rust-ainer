@@ -1,4 +1,6 @@
 use clap::{Parser, error::Result};
+use nix::sys::socket::{AddressFamily, SockFlag, SockType, socketpair};
+use std::os::unix::io::RawFd;
 use std::path::PathBuf;
 
 use crate::errors::Errcode;
@@ -30,6 +32,18 @@ fn validate_mount_path(s: &str) -> Result<PathBuf, Errcode> {
         return Err(Errcode::ArgumentInvalid("mount"));
     }
     Ok(path)
+}
+
+pub fn generate_socketpair() -> Result<(RawFd, RawFd), Errcode> {
+    match socketpair(
+        AddressFamily::Unix,
+        SockType::SeqPacket,
+        None,
+        SockFlag::SOCK_CLOEXEC,
+    ) {
+        Ok(res) => Ok(res),
+        Err(_) => Err(Errcode::SocketError(0)),
+    }
 }
 
 pub fn parse_args() -> Result<Args, Errcode> {

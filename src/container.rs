@@ -1,26 +1,46 @@
 use clap::error::Result;
+use nix::sys::wait::waitpid;
+use nix::unistd::{Pid, close};
 
+use crate::child::generate_chilld_process;
 use crate::cli::Args;
 use crate::config::ContainerOpts;
 use crate::errors::Errcode;
 
 use nix::sys::utsname::uname;
+use std::os::unix::io::RawFd;
 
 pub struct Container {
     config: ContainerOpts,
+    sockets: (RawFd, RawFd),
+    child_pid: Option<Pid>,
 }
 
 impl Container {
     pub fn new(args: Args) -> Result<Container, Errcode> {
-        let config = ContainerOpts::new(args.command, args.uid, args.mount_dir)?;
-        Ok(Container { config })
+        let (config, sockets) = ContainerOpts::new(args.command, args.uid, args.mount_dir)?;
+        Ok(Container {
+            config,
+            sockets,
+            child_pid: None,
+        })
     }
     pub fn create(&mut self) -> Result<(), Errcode> {
-        log::debug!("Creation Finished");
+        let pid = generate_chilld_process(self.config.clone());
+        self.child_pid = Some(pid?);
+        log::debug!("Creation finished");
         Ok(())
     }
     pub fn clean_exit(&mut self) -> Result<(), Errcode> {
         log::debug!("Cleaning container");
+        if let Err(e) = close(self.sockets.0) {
+            log::error!("Unable to close write socket: {:?}", e);
+            return Err(Errcode::SocketError(3));
+        }
+        if let Err(e) = close(self.sockets.1) {
+            log::error!("Unable to close write socket: {:?}", e);
+            return Err(Errcode::SocketError(4));
+        }
         Ok(())
     }
 }
@@ -55,9 +75,22 @@ pub fn start(args: Args) -> Result<(), Errcode> {
         log::error!("error while creating container {:?}", e);
         return Err(e);
     }
+    log::debug!("Container child PID: {:?}", container.child_pid);
+    let _ = wait_child(container.child_pid);
+
     log::debug!("Finished, cleaning and exiting;");
 
     container.clean_exit()
+}
+pub fn wait_child(pid: Option<Pid>) -> Result<(), Errcode> {
+    if let Some(child_pid) = pid {
+        log::debug!("Waiting child pid {:?}", child_pid);
+        if let Err(e) = waitpid(child_pid, None) {
+            log::error!("Error while for pid to finish: {:?}", e);
+            return Err(Errcode::ChildProcessError(1));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

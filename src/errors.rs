@@ -7,6 +7,8 @@ use clap::error::Result;
 #[derive(Debug)]
 pub enum Errcode {
     ContainerError(u8),
+    ChildProcessError(u8),
+    SocketError(u8),
     NotSupported(u8),
     ArgumentInvalid(&'static str),
 }
